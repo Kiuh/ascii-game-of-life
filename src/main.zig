@@ -1,17 +1,29 @@
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
+
+const Game = struct {
+    allocator: Allocator,
+    counter: u64,
+
+    pub fn init(allocator: Allocator) !Game {
+        return Game{ .allocator = allocator, .counter = 0 };
+    }
+
+    pub fn printFrame(self: *Game) !void {
+        std.debug.print("Something {any}", .{self.counter});
+        self.counter += 1;
+    }
+};
+
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    var game = try Game.init(arena.allocator());
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // Don't forget to flush!
+    while (true) {
+        try game.printFrame();
+        std.debug.print("“\x1B[2J\x1B[H", .{});
+    }
 }
