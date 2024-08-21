@@ -1,30 +1,44 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 
 const ACTIVE: u8 = 35;
 const DISABLED: u8 = 32;
+const ascii_code = std.ascii.control_code;
+
+const Size = struct {
+    width: usize,
+    height: usize,
+    length: usize,
+};
 
 const Game = struct {
     allocator: Allocator,
     file: std.fs.File,
     worldTick: f64,
-    worldWidth: u64,
-    worldHeight: u64,
-    worldCount: usize = undefined,
-    worldMatrix: std.ArrayList(bool) = undefined,
+    size: Size,
+    worldMatrix: ArrayList(bool) = undefined,
     iterator: usize = 0,
 
     pub fn init(allocator: Allocator, file: std.fs.File, worldTick: f64, worldSize: @Vector(2, u64)) !Game {
-        var game = Game{ .allocator = allocator, .file = file, .worldTick = worldTick, .worldWidth = worldSize[0], .worldHeight = worldSize[1] };
+        var game = Game{
+            .allocator = allocator,
+            .file = file,
+            .worldTick = worldTick,
+            .size = .{
+                .width = worldSize[0],
+                .height = worldSize[1],
+                .length = worldSize[0] * worldSize[1],
+            },
+        };
         try game.initWorld();
         return game;
     }
 
     pub fn initWorld(self: *Game) !void {
-        self.worldCount = self.worldHeight * self.worldWidth;
-        self.worldMatrix = std.ArrayList(bool).init(self.allocator);
-        for (0..self.worldCount) |_| {
+        self.worldMatrix = ArrayList(bool).init(self.allocator);
+        for (0..self.size.length) |_| {
             try self.worldMatrix.append(true);
         }
     }
@@ -57,7 +71,7 @@ const Game = struct {
     }
 
     fn printWorld(self: *Game) !void {
-        var chars: std.ArrayList(u8) = std.ArrayList(u8).init(self.allocator);
+        var chars = ArrayList(u8).init(self.allocator);
         defer chars.deinit();
 
         for (self.worldMatrix.items, 0..) |item, i| {
@@ -67,9 +81,9 @@ const Game = struct {
                 try chars.append(DISABLED);
             }
 
-            if ((i + 1) % self.worldWidth == 0) {
-                try chars.append(std.ascii.control_code.cr);
-                try chars.append(std.ascii.control_code.lf);
+            if ((i + 1) % self.size.width == 0) {
+                try chars.append(ascii_code.cr);
+                try chars.append(ascii_code.lf);
             }
         }
 
@@ -78,7 +92,7 @@ const Game = struct {
 
     fn calculateNextStep(self: *Game) !void {
         self.worldMatrix.items[self.iterator] = !self.worldMatrix.items[self.iterator];
-        if (self.iterator == self.worldCount - 1) {
+        if (self.iterator == self.size.length - 1) {
             self.iterator = 0;
         } else {
             self.iterator += 1;
@@ -86,7 +100,7 @@ const Game = struct {
     }
 
     fn clearConsole(self: *Game) !void {
-        try self.print("{c}[0;0H{c}[J", .{ std.ascii.control_code.esc, std.ascii.control_code.esc });
+        try self.print("{c}[0;0H{c}[J", .{ ascii_code.esc, ascii_code.esc });
     }
 
     fn print(self: *Game, comptime fmt: []const u8, args: anytype) !void {
