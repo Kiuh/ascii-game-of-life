@@ -9,10 +9,14 @@ const targets: []const std.Target.Query = &.{
 };
 
 pub fn build(b: *std.Build) !void {
+    const root_source_file = b.path("src/main.zig");
+    const run_step = b.step("run", "Run the application");
+    const test_step = b.step("test", "Run unit tests");
+
     for (targets) |t| {
         const exe = b.addExecutable(.{
             .name = "ascii-game-of-life",
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = root_source_file,
             .target = b.resolveTargetQuery(t),
             .optimize = .ReleaseSafe,
         });
@@ -28,5 +32,22 @@ pub fn build(b: *std.Build) !void {
         });
 
         b.getInstallStep().dependOn(&target_output.step);
+
+        // Add test command for current os type
+        if (t.os_tag == .windows) {
+            const unit_tests = b.addTest(.{
+                .root_source_file = root_source_file,
+                .target = b.resolveTargetQuery(t),
+            });
+
+            const run_unit_tests = b.addRunArtifact(unit_tests);
+            test_step.dependOn(&run_unit_tests.step);
+        }
+
+        // Add run command for current os type
+        if (t.os_tag == .windows) {
+            const run_exe = b.addRunArtifact(exe);
+            run_step.dependOn(&run_exe.step);
+        }
     }
 }

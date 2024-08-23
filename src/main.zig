@@ -126,9 +126,17 @@ pub fn main() !void {
     try game.run(0);
 }
 
-test "Memory leak test" {
+test "memory-leak-test" {
     const allocator = std.testing.allocator;
-    const in_file = std.io.getStdOut();
+    const file_name = "test_file.txt";
+    const in_file = try std.fs.cwd().createFile(
+        file_name,
+        .{ .read = true },
+    );
+    defer in_file.close();
+    defer std.fs.cwd().deleteFile(file_name) catch |err| {
+        std.debug.panic("Cannot delete file!\n{any}", .{err});
+    };
 
     var game = try Game.init(allocator, in_file, in_worldTick, in_worldSize);
     defer game.deinit() catch |err| {
