@@ -44,13 +44,15 @@ const Matrix = struct {
         self.list.items[p.x + p.y * self.size.x] = value;
     }
 
+    pub fn setValueRaw(self: *Matrix, i: usize, value: bool) void {
+        self.list.items[i] = value;
+    }
+
     pub fn getActiveNeighboursCount(self: *Matrix, p: Vec2) u8 {
-        //log("----$$$\n", .{});
         var counter: u8 = 0;
         for (0..3) |y_i| {
             for (0..3) |x_i| {
                 if ((p.x == 0 and x_i == 0) or (p.y == 0 and y_i == 0) or (x_i == 1 and y_i == 1)) {
-                    //log("skip {} {}\n", .{ x_i, y_i });
                     continue;
                 }
 
@@ -62,12 +64,8 @@ const Matrix = struct {
                 if (self.isValid(pos) and self.getValue(pos)) {
                     counter += 1;
                 }
-
-                //log("{} {}\n", .{ pos, self.isValid(pos) and self.getValue(pos) });
             }
-            //log("--ENDL\n", .{});
         }
-        //log("----$$$\n", .{});
         return counter;
     }
 
@@ -77,7 +75,7 @@ const Matrix = struct {
 
     fn fillList(self: *Matrix) !void {
         for (0..self.size.len()) |_| {
-            try self.list.append(true);
+            try self.list.append(false);
         }
     }
 
@@ -93,29 +91,37 @@ const Matrix = struct {
 const Game = struct {
     allocator: Allocator,
     file: std.fs.File,
-    worldTick: f64,
-    size: Vec2,
+    fps: f64,
+    initWorldData: WorldData,
     worldMatrix1: Matrix = undefined,
     worldMatrix2: Matrix = undefined,
     activeMatrix: *Matrix = undefined,
+    generation: u64 = 0,
 
-    pub fn init(allocator: Allocator, file: std.fs.File, worldTick: f64, size: Vec2) !Game {
+    pub fn init(allocator: Allocator, file: std.fs.File, fps: f64, data: WorldData) !Game {
         var game = Game{
             .allocator = allocator,
             .file = file,
-            .worldTick = worldTick,
-            .size = size,
+            .fps = fps,
+            .initWorldData = data,
         };
 
         try game.initMatrices();
         game.setRandomWorld();
+        //game.setInitData();
         return game;
     }
 
     fn initMatrices(self: *Game) !void {
-        self.worldMatrix1 = try Matrix.init(self.allocator, self.size);
-        self.worldMatrix2 = try Matrix.init(self.allocator, self.size);
+        self.worldMatrix1 = try Matrix.init(self.allocator, self.initWorldData.size);
+        self.worldMatrix2 = try Matrix.init(self.allocator, self.initWorldData.size);
         self.activeMatrix = &self.worldMatrix1;
+    }
+
+    fn setInitData(self: *Game) void {
+        for (self.initWorldData.entries) |value| {
+            self.activeMatrix.setValue(value, true);
+        }
     }
 
     fn setRandomWorld(self: *Game) void {
@@ -144,18 +150,23 @@ const Game = struct {
     fn proceedTick(self: *Game) !u64 {
         try self.clearConsole();
         try self.printWorld();
+        try self.printGenerationNumber();
         try self.calculateNextStep();
-        const sleep_time: u64 = @intFromFloat(self.worldTick * @as(f64, @floatFromInt(std.time.ns_per_s)));
+        const sleep_time: u64 = @intFromFloat(@as(f64, (1 / self.fps)) * @as(f64, @floatFromInt(std.time.ns_per_s)));
         std.time.sleep(sleep_time);
         return sleep_time;
+    }
+
+    fn printGenerationNumber(self: *Game) !void {
+        try self.print("Generation: {}\n", .{self.generation});
     }
 
     fn printWorld(self: *Game) !void {
         var chars = ArrayList(u8).init(self.allocator);
         defer chars.deinit();
 
-        for (0..self.size.y) |y| {
-            for (0..self.size.x) |x| {
+        for (0..self.initWorldData.size.y) |y| {
+            for (0..self.initWorldData.size.x) |x| {
                 const p = Vec2.fromUSize(x, y);
                 if (self.activeMatrix.getValue(p)) {
                     try chars.append(ACTIVE);
@@ -179,24 +190,25 @@ const Game = struct {
         }
         applyRules(source, result);
         self.activeMatrix = result;
+        self.generation += 1;
     }
 
     fn applyRules(source: *Matrix, result: *Matrix) void {
         for (0..source.size.y) |y| {
             for (0..source.size.x) |x| {
-                const p = Vec2.fromUSize(x, y);
-                const is_alive = source.getValue(p);
-                const alive_neighbours = source.getActiveNeighboursCount(p);
-                //log("{} - {}\n", .{ p, alive_neighbours });
-                var outcome: bool = undefined;
-                if (!is_alive and alive_neighbours >= 3) {
+                const pos = Vec2.fromUSize(x, y);
+
+                const is_alive = source.getValue(pos);
+                const alive_neighbours = source.getActiveNeighboursCount(pos);
+                var outcome: bool = false;
+
+                if (is_alive and (alive_neighbours == 2 or alive_neighbours == 3)) {
                     outcome = true;
-                } else if (is_alive and (alive_neighbours == 2 or alive_neighbours == 3)) {
+                } else if (alive_neighbours == 3) {
                     outcome = true;
-                } else {
-                    outcome = false;
                 }
-                result.setValue(p, outcome);
+
+                result.setValue(pos, outcome);
             }
         }
     }
@@ -212,15 +224,26 @@ const Game = struct {
     }
 };
 
-const in_worldTick: f64 = 1.6;
-const in_worldSize = Vec2{ .x = 40, .y = 20 };
+const WorldData = struct {
+    size: Vec2,
+    entries: []const Vec2,
+};
+
+const in_fps: f64 = 2;
+const in_initWorldData = WorldData{ .size = .{ .x = 80, .y = 40 }, .entries = &.{
+    .{ .x = 1, .y = 0 },
+    .{ .x = 2, .y = 1 },
+    .{ .x = 0, .y = 2 },
+    .{ .x = 1, .y = 2 },
+    .{ .x = 2, .y = 2 },
+} };
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     const in_file = std.io.getStdOut();
 
-    var game = try Game.init(allocator, in_file, in_worldTick, in_worldSize);
+    var game = try Game.init(allocator, in_file, in_fps, in_initWorldData);
     defer game.deinit() catch |err| {
         std.debug.panic("Panic while deinit game!\n{any}", .{err});
     };
@@ -240,7 +263,7 @@ test "memory-leak-test" {
         std.debug.panic("Cannot delete file!\n{any}", .{err});
     };
 
-    var game = try Game.init(allocator, in_file, in_worldTick, in_worldSize);
+    var game = try Game.init(allocator, in_file, in_fps, in_initWorldData);
     defer game.deinit() catch |err| {
         std.debug.panic("Panic while deinit game!\n{any}", .{err});
     };
