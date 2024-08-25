@@ -5,8 +5,11 @@ const log = std.debug.print;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
-const ACTIVE: u8 = 35;
-const DISABLED: u8 = 32;
+const CORNER: u8 = '+';
+const WALL: u8 = '|';
+const FLOOR: u8 = '-';
+const ACTIVE: u8 = '#';
+const DISABLED: u8 = ' ';
 const ascii_code = std.ascii.control_code;
 
 const Vec2 = struct {
@@ -92,7 +95,7 @@ const Game = struct {
     allocator: Allocator,
     file: std.fs.File,
     fps: f64,
-    initWorldData: WorldData,
+    worldData: WorldData,
     worldMatrix1: Matrix = undefined,
     worldMatrix2: Matrix = undefined,
     activeMatrix: *Matrix = undefined,
@@ -103,7 +106,7 @@ const Game = struct {
             .allocator = allocator,
             .file = file,
             .fps = fps,
-            .initWorldData = data,
+            .worldData = data,
         };
 
         try game.initMatrices();
@@ -113,13 +116,13 @@ const Game = struct {
     }
 
     fn initMatrices(self: *Game) !void {
-        self.worldMatrix1 = try Matrix.init(self.allocator, self.initWorldData.size);
-        self.worldMatrix2 = try Matrix.init(self.allocator, self.initWorldData.size);
+        self.worldMatrix1 = try Matrix.init(self.allocator, self.worldData.size);
+        self.worldMatrix2 = try Matrix.init(self.allocator, self.worldData.size);
         self.activeMatrix = &self.worldMatrix1;
     }
 
     fn setInitData(self: *Game) void {
-        for (self.initWorldData.entries) |value| {
+        for (self.worldData.entries) |value| {
             self.activeMatrix.setValue(value, true);
         }
     }
@@ -165,19 +168,42 @@ const Game = struct {
         var chars = ArrayList(u8).init(self.allocator);
         defer chars.deinit();
 
-        for (0..self.initWorldData.size.y) |y| {
-            for (0..self.initWorldData.size.x) |x| {
+        //Top of vingette
+        try appendVingetteLine(&chars, self.worldData.size.x);
+
+        for (0..self.worldData.size.y) |y| {
+            // Left wall
+            try chars.append(WALL);
+
+            // Content
+            for (0..self.worldData.size.x) |x| {
                 const p = Vec2.fromUSize(x, y);
-                if (self.activeMatrix.getValue(p)) {
-                    try chars.append(ACTIVE);
-                } else {
-                    try chars.append(DISABLED);
-                }
+                const char = if (self.activeMatrix.getValue(p)) ACTIVE else DISABLED;
+                try chars.append(char);
             }
-            try chars.append(ascii_code.cr);
-            try chars.append(ascii_code.lf);
+
+            // Right wall
+            try chars.append(WALL);
+
+            try appendEndl(&chars);
         }
+
+        //Bottom of vingette
+        try appendVingetteLine(&chars, self.worldData.size.x);
+
         try self.print("{s}", .{chars.items});
+    }
+
+    fn appendVingetteLine(array: *ArrayList(u8), width: u64) !void {
+        try array.append(CORNER);
+        try array.appendNTimes(FLOOR, width);
+        try array.append(CORNER);
+        try appendEndl(array);
+    }
+
+    fn appendEndl(array: *ArrayList(u8)) !void {
+        try array.append(ascii_code.cr);
+        try array.append(ascii_code.lf);
     }
 
     fn calculateNextStep(self: *Game) !void {
