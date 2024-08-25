@@ -23,6 +23,9 @@ pub fn build(b: *std.Build) !void {
 
         b.installArtifact(exe);
 
+        const clap = b.dependency("clap", .{});
+        exe.root_module.addImport("clap", clap.module("clap"));
+
         const target_output = b.addInstallArtifact(exe, .{
             .dest_dir = .{
                 .override = .{

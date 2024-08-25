@@ -1,7 +1,12 @@
 .{
     .name = "ascii-game-of-life",
     .version = "1.0.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .clap = .{
+            .url = "https://github.com/Hejsil/zig-clap/archive/f0a281ffe91fb64f116dcb04c34cecef70e8c79c.tar.gz",
+            .hash = "122026b67ce2974e3b2fcfd3e2e164b73ee60c55d13f3f60ca7db6c316c8f22a6bf8",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
