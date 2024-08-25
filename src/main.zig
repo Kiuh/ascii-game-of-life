@@ -171,9 +171,15 @@ const Game = struct {
     }
 
     fn proceedTick(self: *Game) !u64 {
-        try self.clearConsole();
-        try self.printWorld();
-        try self.printAddictionalInfo();
+        var chars = ArrayList(u8).init(self.allocator);
+        defer chars.deinit();
+
+        try self.addClearConsole(&chars);
+        try self.addWorld(&chars);
+        try self.addAddictionalInfo(&chars);
+
+        try self.print("{s}", .{chars.items});
+
         try self.calculateNextStep();
 
         const seconds_part = @as(f64, (1 / @as(f64, @floatFromInt(self.tps))));
@@ -183,17 +189,15 @@ const Game = struct {
         return sleep_time;
     }
 
-    fn printAddictionalInfo(self: *Game) !void {
-        try self.print("Generation: {} \n", .{self.generation});
-        try self.print("Tps: {} \n", .{self.tps});
+    fn addAddictionalInfo(self: *Game, chars: *ArrayList(u8)) !void {
+        try self.appendFormat(chars, "Generation: {} \n", .{self.generation});
+        try self.appendFormat(chars, "Tps: {} \n", .{self.tps});
     }
 
-    fn printWorld(self: *Game) !void {
-        var chars = ArrayList(u8).init(self.allocator);
-        defer chars.deinit();
+    fn addWorld(self: *Game, chars: *ArrayList(u8)) !void {
 
         //Top of vignette
-        try appendVignetteLine(&chars, self.size.x);
+        try appendVignetteLine(chars, self.size.x);
 
         for (0..self.size.y) |y| {
             // Left wall
@@ -209,25 +213,23 @@ const Game = struct {
             // Right wall
             try chars.append(WALL);
 
-            try appendEndl(&chars);
+            try appendEndl(chars);
         }
 
         //Bottom of vignette
-        try appendVignetteLine(&chars, self.size.x);
-
-        try self.print("{s}", .{chars.items});
+        try appendVignetteLine(chars, self.size.x);
     }
 
-    fn appendVignetteLine(array: *ArrayList(u8), width: u64) !void {
-        try array.append(CORNER);
-        try array.appendNTimes(FLOOR, width);
-        try array.append(CORNER);
-        try appendEndl(array);
+    fn appendVignetteLine(chars: *ArrayList(u8), width: u64) !void {
+        try chars.append(CORNER);
+        try chars.appendNTimes(FLOOR, width);
+        try chars.append(CORNER);
+        try appendEndl(chars);
     }
 
-    fn appendEndl(array: *ArrayList(u8)) !void {
-        try array.append(ascii_code.cr);
-        try array.append(ascii_code.lf);
+    fn appendEndl(chars: *ArrayList(u8)) !void {
+        try chars.append(ascii_code.cr);
+        try chars.append(ascii_code.lf);
     }
 
     fn calculateNextStep(self: *Game) !void {
@@ -263,8 +265,14 @@ const Game = struct {
         }
     }
 
-    fn clearConsole(self: *Game) !void {
-        try self.print("{c}[0;0H{c}[J", .{ ascii_code.esc, ascii_code.esc });
+    fn addClearConsole(self: *Game, chars: *ArrayList(u8)) !void {
+        try self.appendFormat(chars, "{c}[0;0H{c}[J", .{ ascii_code.esc, ascii_code.esc });
+    }
+
+    fn appendFormat(self: *Game, chars: *ArrayList(u8), comptime fmt: []const u8, args: anytype) !void {
+        const buffer = try std.fmt.allocPrint(self.allocator, fmt, args);
+        defer self.allocator.free(buffer);
+        try chars.appendSlice(buffer);
     }
 
     fn print(self: *Game, comptime fmt: []const u8, args: anytype) !void {
