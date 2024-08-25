@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) !void {
             .name = "ascii-game-of-life",
             .root_source_file = root_source_file,
             .target = b.resolveTargetQuery(t),
-            .optimize = .ReleaseSafe,
+            .optimize = .ReleaseFast,
         });
 
         b.installArtifact(exe);

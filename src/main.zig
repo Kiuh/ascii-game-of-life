@@ -55,15 +55,22 @@ const Matrix = struct {
     size: Vec2,
 
     pub fn init(allocator: Allocator, size: Vec2) !Matrix {
-        var matrix = Matrix{ .size = size, .list = ArrayList(bool).init(allocator) };
-        for (0..matrix.size.len()) |_| {
-            try matrix.list.append(false);
-        }
+        var matrix = Matrix{
+            .size = size,
+            .list = ArrayList(bool).init(allocator),
+        };
+        try matrix.fillWithFalse();
         return matrix;
     }
 
     pub fn deinit(self: *Matrix) void {
         self.list.deinit();
+    }
+
+    pub fn fillWithFalse(self: *Matrix) !void {
+        for (0..self.size.len()) |_| {
+            try self.list.append(false);
+        }
     }
 
     pub fn getValue(self: *Matrix, p: Vec2i) bool {
@@ -116,17 +123,13 @@ const Game = struct {
     activeMatrix: *Matrix = undefined,
     generation: u64 = 0,
 
-    pub fn init(allocator: Allocator, file: std.fs.File, tps: u64, size: Vec2, init_data: WorldData) !Game {
-        var game = Game{
+    pub fn init(allocator: Allocator, file: std.fs.File, tps: u64, size: Vec2) !Game {
+        return Game{
             .allocator = allocator,
             .file = file,
             .tps = tps,
             .size = size,
         };
-
-        try game.initMatrices();
-        game.setInitData(init_data);
-        return game;
     }
 
     pub fn deinit(self: *Game) !void {
@@ -140,17 +143,20 @@ const Game = struct {
         self.activeMatrix = &self.worldMatrix1;
     }
 
-    fn setInitData(self: *Game, init_data: WorldData) void {
-        if (init_data.isRandom) {
+    fn setCreationData(self: *Game, creation_data: WorldCreationData) void {
+        if (creation_data.isRandom) {
             self.activeMatrix.setRandomBools();
         } else {
-            for (init_data.entries) |value| {
+            for (creation_data.entries) |value| {
                 self.activeMatrix.setValue(value.toVec2i(), true);
             }
         }
     }
 
-    pub fn run(self: *Game, time: u64) !void {
+    pub fn run(self: *Game, time: u64, creation_data: WorldCreationData) !void {
+        try self.initMatrices();
+        self.setCreationData(creation_data);
+
         if (time == 0) {
             while (true) {
                 _ = try self.proceedTick();
@@ -268,14 +274,14 @@ const Game = struct {
     }
 };
 
-const WorldData = struct {
+const WorldCreationData = struct {
     isRandom: bool,
     entries: []const Vec2 = &.{},
 };
 
 const InitMode = enum { random, flyer };
 
-const flyer_world_data = WorldData{
+const flyer_world_data = WorldCreationData{
     .isRandom = false,
     .entries = &.{
         .{ .x = 1, .y = 0 },
@@ -293,7 +299,7 @@ pub fn main() !void {
     // Init clap
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit.
-        \\-t, --tps <INT>        Sets world ticks per second [default = 6].
+        \\-t, --tps <INT>        Sets world ticks per second [default = 20].
         \\                       Example: -t 60
         \\-s, --size <STR>       Sets size of the world [default = 80 x 40].
         \\                       Example: -s 100-50
@@ -328,10 +334,10 @@ pub fn main() !void {
     }
 
     // Prepare data
-    var tps: u64 = 6;
+    var tps: u64 = 20;
     var size = Vec2{ .x = 80, .y = 40 };
     const file = std.io.getStdOut();
-    var init_data = WorldData{ .isRandom = true };
+    var creation_data = WorldCreationData{ .isRandom = true };
     var duration: u64 = 0;
 
     // Process other arguments
@@ -342,7 +348,7 @@ pub fn main() !void {
     if (res.args.mode) |value| {
         switch (value) {
             .flyer => {
-                init_data = flyer_world_data;
+                creation_data = flyer_world_data;
             },
             else => {},
         }
@@ -361,17 +367,18 @@ pub fn main() !void {
     }
 
     // Init game
-    var game = try Game.init(allocator, file, tps, size, init_data);
+    var game = try Game.init(allocator, file, tps, size);
     defer game.deinit() catch |err| {
         std.debug.panic("Panic while deinit game!\n{any}", .{err});
     };
 
     // Run game
-    try game.run(duration);
+    try game.run(duration, creation_data);
 }
 
 test "memory-leak-test" {
     const tps = 60;
+    const size = Vec2{ .x = 5, .y = 5 };
     const allocator = std.testing.allocator;
     const file_name = "test_file.txt";
     const file = try std.fs.cwd().createFile(
@@ -379,14 +386,14 @@ test "memory-leak-test" {
         .{ .read = true },
     );
     defer file.close();
-    errdefer std.fs.cwd().deleteFile(file_name) catch |err| {
+    defer std.fs.cwd().deleteFile(file_name) catch |err| {
         std.debug.panic("Cannot delete file!\n{any}", .{err});
     };
 
-    var game = try Game.init(allocator, file, tps, .{ .x = 50, .y = 50 }, flyer_world_data);
+    var game = try Game.init(allocator, file, tps, size);
     defer game.deinit() catch |err| {
         std.debug.panic("Panic while deinit game!\n{any}", .{err});
     };
 
-    try game.run(1);
+    try game.run(1, flyer_world_data);
 }
