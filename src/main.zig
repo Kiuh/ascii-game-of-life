@@ -180,16 +180,6 @@ const Game = struct {
 
         try self.print("{s}", .{chars.items});
 
-        const utf16le = "😎 hello! 😎";
-
-        var writer = std.io.getStdOut().writer();
-        var it = std.unicode.Utf16LeIterator.init(utf16le);
-        while (try it.nextCodepoint()) |codepoint| {
-            var buf: [4]u8 = [_]u8{undefined} ** 4;
-            const len = try std.unicode.utf8Encode(codepoint, &buf);
-            try writer.writeAll(buf[0..len]);
-        }
-
         try self.calculateNextStep();
 
         const seconds_part = @as(f64, (1 / @as(f64, @floatFromInt(self.tps))));
